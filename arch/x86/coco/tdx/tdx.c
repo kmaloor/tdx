@@ -7,12 +7,15 @@
 #include <linux/cpufeature.h>
 #include <linux/export.h>
 #include <linux/io.h>
+#include <linux/irq.h>
+#include <linux/interrupt.h>
 #include <asm/coco.h>
 #include <asm/tdx.h>
 #include <asm/vmx.h>
 #include <asm/insn.h>
 #include <asm/insn-eval.h>
 #include <asm/pgtable.h>
+#include <asm/irqdomain.h>
 
 /* MMIO direction */
 #define EPT_READ	0
@@ -36,6 +39,8 @@
 #define TDCALL_INVALID_OPERAND	0xc0000100
 
 #define TDREPORT_SUBTYPE_0	0
+
+static int tdx_event_irq __ro_after_init;
 
 /* Called from __tdx_hypercall() for unrecoverable failure */
 noinstr void __tdx_hypercall_failed(void)
@@ -822,3 +827,45 @@ void __init tdx_early_init(void)
 
 	pr_info("Guest detected\n");
 }
+
+/**
+ * tdx_get_event_irq() - Allocate an IRQ for event notification from the
+ *			 VMM to the TDX Guest.
+ *
+ * @cpu: CPU affinity index
+ *
+ * The VMM always notifies the TDX guest via the same CPU that calls the
+ * SetupEventNotifyInterrupt TDVMCALL. So allocate an IRQ/vector from the
+ * x86_vector_domain and pin it on the given CPU on which TDVMCALL will be
+ * called.
+ *
+ * Return IRQ on success or errno on failure.
+ *
+ */
+int tdx_get_event_irq(int cpu)
+{
+	struct irq_alloc_info info;
+	int irq;
+
+	if (!cpu_feature_enabled(X86_FEATURE_TDX_GUEST))
+		return -ENODEV;
+
+	if (tdx_event_irq > 0)
+		return tdx_event_irq;
+
+	init_irq_alloc_info(&info, NULL);
+
+	irq = irq_domain_alloc_irqs(x86_vector_domain, 1, NUMA_NO_NODE, &info);
+	if (irq <= 0) {
+		pr_err("Event notification IRQ allocation failed %d\n", irq);
+		return -EIO;
+	}
+
+	irq_set_handler(irq, handle_edge_irq);
+	irq_set_affinity(irq, cpumask_of(cpu));
+
+	tdx_event_irq = irq;
+
+	return irq;
+}
+EXPORT_SYMBOL_GPL(tdx_get_event_irq);
