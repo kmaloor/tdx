@@ -4396,6 +4396,7 @@ static int tdx_td_vcpu_init(struct kvm_vcpu *vcpu, u64 vcpu_rcx)
 	if (!va)
 		return -ENOMEM;
 	tdvpr_pa = __pa(va);
+	tdx->tdvpr_pa = tdvpr_pa;
 
 	tdvpx_pa = kcalloc(tdx_caps.tdvpx_nr_pages, sizeof(*tdx->tdvpx_pa),
 			   GFP_KERNEL_ACCOUNT | __GFP_ZERO);
@@ -4403,6 +4404,8 @@ static int tdx_td_vcpu_init(struct kvm_vcpu *vcpu, u64 vcpu_rcx)
 		ret = -ENOMEM;
 		goto free_tdvpr;
 	}
+	tdx->tdvpx_pa = tdvpx_pa;
+
 	for (i = 0; i < tdx_caps.tdvpx_nr_pages; i++) {
 		va = __get_free_page(GFP_KERNEL_ACCOUNT);
 		if (!va)
@@ -4410,15 +4413,21 @@ static int tdx_td_vcpu_init(struct kvm_vcpu *vcpu, u64 vcpu_rcx)
 		tdvpx_pa[i] = __pa(va);
 	}
 
+	/*
+	 * Keep the tdvpr and tdvpx pages allocated above, but adding them to
+	 * the TDX module and the TDH_VP_CREATE seamcall require TD to be
+	 * initialized.
+	 */
+	if (!kvm_tdx->td_initialized)
+		return 0;
+
 	err = tdh_vp_create(kvm_tdx->tdr_pa, tdvpr_pa);
 	if (WARN_ON_ONCE(err)) {
 		ret = -EIO;
 		pr_tdx_error(TDH_VP_CREATE, err, NULL);
 		goto td_bugged_free_tdvpx;
 	}
-	tdx->tdvpr_pa = tdvpr_pa;
 
-	tdx->tdvpx_pa = tdvpx_pa;
 	for (i = 0; i < tdx_caps.tdvpx_nr_pages; i++) {
 		err = tdh_vp_addcx(tdx->tdvpr_pa, tdvpx_pa[i]);
 		if (WARN_ON_ONCE(err)) {
