@@ -707,7 +707,7 @@ static bool tdx_cache_flush_required(void)
  * the VMM or private to the guest.  The VMM is expected to change its mapping
  * of the page in response.
  */
-static bool tdx_enc_status_changed(unsigned long vaddr, int numpages, bool enc)
+bool tdx_enc_status_changed(unsigned long vaddr, int numpages, bool enc)
 {
 	phys_addr_t start = __pa(vaddr);
 	phys_addr_t end   = __pa(vaddr + numpages * PAGE_SIZE);

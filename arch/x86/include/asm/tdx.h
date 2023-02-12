@@ -52,12 +52,17 @@ bool tdx_early_handle_ve(struct pt_regs *regs);
 
 int tdx_mcall_get_report0(u8 *reportdata, u8 *tdreport);
 
+bool tdx_enc_status_changed(unsigned long vaddr, int numpages, bool enc);
+void tdx_kexec_prepare(bool crash);
+
 #else
 
 static inline void tdx_early_init(void) { };
 static inline void tdx_safe_halt(void) { };
 
 static inline bool tdx_early_handle_ve(struct pt_regs *regs) { return false; }
+
+static inline void tdx_kexec_prepare(bool crash) {}
 
 #endif /* CONFIG_INTEL_TDX_GUEST */
 

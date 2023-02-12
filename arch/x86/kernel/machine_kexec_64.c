@@ -28,6 +28,7 @@
 #include <asm/setup.h>
 #include <asm/set_memory.h>
 #include <asm/cpu.h>
+#include <asm/tdx.h>
 
 #ifdef CONFIG_ACPI
 /*
@@ -312,6 +313,7 @@ void machine_kexec(struct kimage *image)
 	local_irq_disable();
 	hw_breakpoint_disable();
 	cet_disable();
+	tdx_kexec_prepare(image->type == KEXEC_TYPE_CRASH);
 
 	if (image->preserve_context) {
 #ifdef CONFIG_X86_IO_APIC
