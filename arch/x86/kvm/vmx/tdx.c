@@ -463,24 +463,25 @@ free_hkid:
 	tdx_hkid_free(kvm_tdx);
 }
 
-void tdx_vm_free(struct kvm *kvm)
+static void tdx_vm_free_tdcs(struct kvm_tdx *kvm_tdx)
 {
-	struct kvm_tdx *kvm_tdx = to_kvm_tdx(kvm);
 	int i;
 
-	/* Can't reclaim or free TD pages if teardown failed. */
-	if (is_hkid_assigned(kvm_tdx))
+	if (!kvm_tdx->tdcs_pa)
 		return;
 
-	if (kvm_tdx->tdcs_pa) {
-		for (i = 0; i < tdx_caps.tdcs_nr_pages; i++)
-			tdx_reclaim_td_page(kvm_tdx->tdcs_pa[i]);
-		kfree(kvm_tdx->tdcs_pa);
-		kvm_tdx->tdcs_pa = NULL;
-	}
+	for (i = 0; i < tdx_caps.tdcs_nr_pages; i++)
+		tdx_reclaim_td_page(kvm_tdx->tdcs_pa[i]);
 
+	kfree(kvm_tdx->tdcs_pa);
+	kvm_tdx->tdcs_pa = NULL;
+}
+
+static void tdx_vm_free_tdr(struct kvm_tdx *kvm_tdx)
+{
 	if (!kvm_tdx->tdr_pa)
 		return;
+
 	/*
 	 * TDX module maps TDR with TDX global HKID.  TDX module may access TDR
 	 * while operating on TD (Especially reclaiming TDCS).  Cache flush with
@@ -491,6 +492,18 @@ void tdx_vm_free(struct kvm *kvm)
 
 	free_page((unsigned long)__va(kvm_tdx->tdr_pa));
 	kvm_tdx->tdr_pa = 0;
+}
+
+void tdx_vm_free(struct kvm *kvm)
+{
+	struct kvm_tdx *kvm_tdx = to_kvm_tdx(kvm);
+
+	/* Can't reclaim or free TD pages if teardown failed. */
+	if (is_hkid_assigned(kvm_tdx))
+		return;
+
+	tdx_vm_free_tdcs(kvm_tdx);
+	tdx_vm_free_tdr(kvm_tdx);
 }
 
 static int tdx_do_tdh_mng_key_config(void *param)
