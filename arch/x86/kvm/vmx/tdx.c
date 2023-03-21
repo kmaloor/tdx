@@ -744,8 +744,11 @@ void tdx_vcpu_free(struct kvm_vcpu *vcpu)
 		kfree(tdx->tdvpx_pa);
 		tdx->tdvpx_pa = NULL;
 	}
-	tdx_reclaim_td_page(tdx->tdvpr_pa);
-	tdx->tdvpr_pa = 0;
+
+	if (tdx->tdvpr_pa) {
+		tdx_reclaim_td_page(tdx->tdvpr_pa);
+		tdx->tdvpr_pa = 0;
+	}
 
 	/*
 	 * kvm_free_vcpus()
