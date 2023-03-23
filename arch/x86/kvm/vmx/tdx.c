@@ -4408,6 +4408,35 @@ out:
 	return r;
 }
 
+static int tdx_td_vcpu_setup(struct kvm_vcpu *vcpu)
+{
+	struct kvm_tdx *kvm_tdx = to_kvm_tdx(vcpu->kvm);
+	struct vcpu_tdx *tdx = to_tdx(vcpu);
+	unsigned long *tdvpx_pa = tdx->tdvpx_pa;
+	int i;
+	u64 err;
+
+	err = tdh_vp_create(kvm_tdx->tdr_pa, tdx->tdvpr_pa);
+	if (WARN_ON_ONCE(err)) {
+		pr_tdx_error(TDH_VP_CREATE, err, NULL);
+		return -EIO;
+	}
+
+	for (i = 0; i < tdx_caps.tdvpx_nr_pages; i++) {
+		err = tdh_vp_addcx(tdx->tdvpr_pa, tdvpx_pa[i]);
+		if (WARN_ON_ONCE(err)) {
+			pr_tdx_error(TDH_VP_ADDCX, err, NULL);
+			for (; i < tdx_caps.tdvpx_nr_pages; i++) {
+				free_page((unsigned long)__va(tdvpx_pa[i]));
+				tdvpx_pa[i] = 0;
+			}
+			return -EIO;
+		}
+	}
+
+	return 0;
+}
+
 static int tdx_td_vcpu_init(struct kvm_vcpu *vcpu, u64 vcpu_rcx)
 {
 	struct kvm_tdx *kvm_tdx = to_kvm_tdx(vcpu->kvm);
@@ -4450,25 +4479,9 @@ static int tdx_td_vcpu_init(struct kvm_vcpu *vcpu, u64 vcpu_rcx)
 	if (!kvm_tdx->td_initialized)
 		return 0;
 
-	err = tdh_vp_create(kvm_tdx->tdr_pa, tdvpr_pa);
-	if (WARN_ON_ONCE(err)) {
-		ret = -EIO;
-		pr_tdx_error(TDH_VP_CREATE, err, NULL);
+	ret = tdx_td_vcpu_setup(vcpu);
+	if (ret)
 		goto td_bugged_free_tdvpx;
-	}
-
-	for (i = 0; i < tdx_caps.tdvpx_nr_pages; i++) {
-		err = tdh_vp_addcx(tdx->tdvpr_pa, tdvpx_pa[i]);
-		if (WARN_ON_ONCE(err)) {
-			ret = -EIO;
-			pr_tdx_error(TDH_VP_ADDCX, err, NULL);
-			for (; i < tdx_caps.tdvpx_nr_pages; i++) {
-				free_page((unsigned long)__va(tdvpx_pa[i]));
-				tdvpx_pa[i] = 0;
-			}
-			goto td_bugged;
-		}
-	}
 
 	err = tdh_vp_init(tdx->tdvpr_pa, vcpu_rcx);
 	if (WARN_ON_ONCE(err)) {
