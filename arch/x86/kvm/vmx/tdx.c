@@ -2049,7 +2049,7 @@ static void tdx_track(struct kvm_tdx *kvm_tdx)
 		 * retry.
 		 */
 		err = tdh_mem_track(kvm_tdx->tdr_pa);
-	} while ((err & TDX_SEAMCALL_STATUS_MASK) == TDX_OPERAND_BUSY);
+	} while (seamcall_masked_status(err) == TDX_OPERAND_BUSY);
 
 	/* Release remote vcpu waiting for TDH.MEM.TRACK in tdx_flush_tlb(). */
 	atomic_dec(&kvm_tdx->tdh_mem_track);
