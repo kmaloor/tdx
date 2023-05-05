@@ -679,6 +679,7 @@ void tdx_vm_free(struct kvm *kvm)
 		return;
 
 	tdx_binding_slots_cleanup(kvm_tdx);
+	tdx_mig_state_destroy(kvm_tdx);
 
 	tdx_vm_free_tdcs(kvm_tdx);
 	tdx_vm_free_tdr(kvm_tdx);
@@ -3704,6 +3705,12 @@ static int setup_tdparams(struct kvm *kvm, struct td_params *td_params,
 		pr_warn("TD doesn't support LBR yet. KVM needs to save/restore "
 			"IA32_LBR_DEPTH properly.\n");
 		return -EOPNOTSUPP;
+	}
+
+	if ((td_params->attributes & TDX_TD_ATTRIBUTE_MIG) &&
+	    tdx_mig_state_create(to_kvm_tdx(kvm))) {
+		pr_warn("Failed to create mig state\n");
+		return -ENOMEM;
 	}
 
 	td_params->tsc_frequency =
