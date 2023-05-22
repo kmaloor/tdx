@@ -149,6 +149,9 @@ struct tdx_mig_state {
 	 */
 	hpa_t *migsc_paddrs;
 	struct tdx_mig_gpa_list blockw_gpa_list;
+	/* Backward stream used on migration abort during post-copy */
+	struct tdx_mig_stream backward_stream;
+	hpa_t backward_migsc_paddr;
 };
 
 struct tdx_mig_capabilities {
@@ -663,6 +666,10 @@ static int tdx_mig_session_init(struct kvm_tdx *kvm_tdx)
 	struct tdx_mig_gpa_list *blockw_gpa_list = &mig_state->blockw_gpa_list;
 	int ret = 0;
 
+	if (tdx_mig_do_stream_create(kvm_tdx, &mig_state->backward_stream,
+				     &mig_state->backward_migsc_paddr))
+		return -EIO;
+
 	if (tdx_is_migration_source(kvm_tdx))
 		ret = tdx_mig_stream_gpa_list_setup(blockw_gpa_list);
 
@@ -767,6 +774,8 @@ static void tdx_mig_state_destroy(struct kvm_tdx *kvm_tdx)
 	WARN_ON_ONCE(atomic_read(&mig_state->streams_created));
 	for (i = 0; i < tdx_mig_caps.max_migs; i++)
 		tdx_reclaim_td_page(mig_state->migsc_paddrs[i]);
+
+	tdx_reclaim_td_page(mig_state->backward_migsc_paddr);
 
 	kfree(mig_state);
 	kvm_tdx->mig_state = NULL;
