@@ -207,6 +207,7 @@ static int tdx_td_post_init(struct kvm_tdx *kvm_tdx);
 static void tdx_flush_vp_on_cpu(struct kvm_vcpu *vcpu);
 static void tdx_add_vcpu_association(struct vcpu_tdx *tdx, int cpu);
 static int tdx_td_vcpu_setup(struct kvm_vcpu *vcpu);
+static void tdx_td_vcpu_post_init(struct vcpu_tdx *tdx);
 
 static bool tdx_is_migration_source(struct kvm_tdx *kvm_tdx);
 
@@ -1263,6 +1264,8 @@ static int tdx_mig_import_state_vp(struct kvm_tdx *kvm_tdx,
 	tdx_add_vcpu_association(vcpu_tdx, cpu);
 	vcpu->cpu = cpu;
 	put_cpu();
+
+	tdx_td_vcpu_post_init(vcpu_tdx);
 
 	return 0;
 }
