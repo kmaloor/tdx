@@ -489,6 +489,11 @@ static inline u64 tdh_import_commit(hpa_t tdr)
 	return tdx_seamcall(TDH_IMPORT_COMMIT, tdr, 0, 0, 0, 0, 0, 0, 0, NULL);
 }
 
+static inline u64 tdh_export_pasue(hpa_t tdr)
+{
+	return tdx_seamcall(TDH_EXPORT_PAUSE, tdr, 0, 0, 0, 0, 0, 0, 0, NULL);
+}
+
 #endif /* CONFIG_INTEL_TDX_HOST */
 
 #endif /* __KVM_X86_TDX_OPS_H */
