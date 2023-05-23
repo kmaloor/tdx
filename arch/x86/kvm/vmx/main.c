@@ -907,6 +907,11 @@ static int vt_vcpu_mem_enc_ioctl(struct kvm_vcpu *vcpu, void __user *argp)
 	return tdx_vcpu_ioctl(vcpu, argp);
 }
 
+static bool vt_allow_write_without_running_vcpu(struct kvm *kvm)
+{
+	return is_td(kvm);
+}
+
 static int vt_skip_emulated_instruction(struct kvm_vcpu *vcpu)
 {
 	if (is_td_vcpu(vcpu))
@@ -1099,6 +1104,8 @@ struct kvm_x86_ops vt_x86_ops __initdata = {
 	.dev_mem_enc_ioctl = tdx_dev_ioctl,
 	.mem_enc_ioctl = vt_mem_enc_ioctl,
 	.vcpu_mem_enc_ioctl = vt_vcpu_mem_enc_ioctl,
+	.allow_write_without_running_vcpu =
+				vt_allow_write_without_running_vcpu,
 
 	.update_fw = vt_update_fw,
 	.match_fw = vt_match_fw,
