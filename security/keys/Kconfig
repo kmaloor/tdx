@@ -133,3 +133,15 @@ config KEY_NOTIFICATIONS
 	  on keys and keyrings on which the caller has View permission.
 	  This makes use of pipes to handle the notification buffer and
 	  provides KEYCTL_WATCH_KEY to enable/disable watches.
+
+config TSM_KEYS
+	tristate "TSM-based (Confidential Computing) keys"
+	help
+	  TSM (Trusted Security Module) key support arranges to convey a blob to
+	  a confidentiality and integrity protected virtual machine / guest
+	  (TVM). The blob instantiation flow involves submitting the measurement
+	  report of a TVM, obtained from the platform TSM, to a remote
+	  attestation service that only provides the key if the report passes
+	  validation. The report format is vendor specific and the validation is
+	  user policy, so this feature requires a /etc/request-key.conf handler
+	  for communicating with the remote attestation provider.
