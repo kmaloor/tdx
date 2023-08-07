@@ -454,7 +454,9 @@ static void kvm_guest_cpu_offline(bool shutdown)
 	kvm_pv_disable_apf();
 	if (!shutdown)
 		apf_task_wake_all();
-	kvmclock_disable();
+	if (kvm_para_has_feature(KVM_FEATURE_CLOCKSOURCE) ||
+	    kvm_para_has_feature(KVM_FEATURE_CLOCKSOURCE2))
+		kvmclock_disable();
 }
 
 static int kvm_cpu_online(unsigned int cpu)
