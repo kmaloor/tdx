@@ -365,6 +365,11 @@ acpi_parse_lapic_nmi(union acpi_subtable_headers * header, const unsigned long e
 #ifdef CONFIG_X86_64
 static int acpi_wakeup_cpu(int apicid, unsigned long start_ip)
 {
+	if (!acpi_mp_wake_mailbox_paddr) {
+		pr_warn_once("No MADT mailbox: cannot bringup secondary CPUs. Booting with kexec?\n");
+		return -EOPNOTSUPP;
+	}
+
 	/*
 	 * Remap mailbox memory only for the first call to acpi_wakeup_cpu().
 	 *
@@ -1184,6 +1189,18 @@ static int __init acpi_parse_mp_wake(union acpi_subtable_headers *header,
 
 	/* Disable CPU onlining/offlining */
 	cpu_hotplug_not_supported();
+
+	/*
+	 * ACPI MADT doesn't allow to offline CPU after it got woke up.
+	 * It limits kexec: target kernel won't be able to use more than
+	 * one CPU.
+	 *
+	 * Zero out mailbox address in the ACPI MADT wakeup structure to
+	 * indicate that the mailbox is not usable.
+	 *
+	 * This is Linux-specific protocol and not reflected in ACPI spec.
+	 */
+	mp_wake->base_address = 0;
 
 	acpi_wake_cpu_handler_update(acpi_wakeup_cpu);
 
