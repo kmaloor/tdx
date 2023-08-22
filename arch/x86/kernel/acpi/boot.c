@@ -1182,6 +1182,9 @@ static int __init acpi_parse_mp_wake(union acpi_subtable_headers *header,
 
 	acpi_mp_wake_mailbox_paddr = mp_wake->base_address;
 
+	/* Disable CPU onlining/offlining */
+	cpu_hotplug_not_supported();
+
 	acpi_wake_cpu_handler_update(acpi_wakeup_cpu);
 
 	return 0;

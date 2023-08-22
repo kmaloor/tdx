@@ -474,6 +474,9 @@ void cpu_maps_update_done(void)
 	mutex_unlock(&cpu_add_remove_lock);
 }
 
+/* Cleared if platform declares CPU hotplug not supported */
+static int cpu_hotplug_supported = 1;
+
 /*
  * If set, cpu_up and cpu_down will return -EBUSY and do nothing.
  * Should always be manipulated under cpu_add_remove_lock
@@ -541,6 +544,18 @@ static void lockdep_acquire_cpus_lock(void)
 static void lockdep_release_cpus_lock(void)
 {
 	rwsem_release(&cpu_hotplug_lock.dep_map, _THIS_IP_);
+}
+
+/*
+ * Declare CPU hotplug not supported.
+ *
+ * It doesn't prevent initial bring up of the CPU, but stops offlining.
+ */
+void cpu_hotplug_not_supported(void)
+{
+	cpu_maps_update_begin();
+	cpu_hotplug_supported = 0;
+	cpu_maps_update_done();
 }
 
 /*
@@ -1473,7 +1488,7 @@ static int cpu_down_maps_locked(unsigned int cpu, enum cpuhp_state target)
 	 * If the platform does not support hotplug, report it explicitly to
 	 * differentiate it from a transient offlining failure.
 	 */
-	if (cc_platform_has(CC_ATTR_HOTPLUG_DISABLED))
+	if (!cpu_hotplug_supported)
 		return -EOPNOTSUPP;
 	if (cpu_hotplug_disabled)
 		return -EBUSY;
