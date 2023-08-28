@@ -423,6 +423,22 @@ static ssize_t read_vmcore(struct kiocb *iocb, struct iov_iter *iter)
 	return __read_vmcore(iter, &iocb->ki_pos);
 }
 
+int vmcore_phys_to_virt(unsigned long paddr, unsigned long *vaddr)
+{
+	struct vmcore *m;
+
+	if (!vmcore_parsed)
+		return -ENODATA;
+
+	list_for_each_entry(m, &vmcore_list, list) {
+		if (paddr >= m->paddr && paddr < m->paddr + m->size) {
+			*vaddr = (unsigned long)(m->vaddr + paddr - m->paddr);
+			return 0;
+		}
+	}
+	return -ENOENT;
+}
+
 int vmcore_virt_to_phys(unsigned long vaddr, unsigned long *paddr)
 {
 	struct vmcore *m;

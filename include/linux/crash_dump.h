@@ -33,6 +33,8 @@ int vmcore_scan_elf_notes(const char *match, unsigned long *val);
 
 int vmcore_virt_to_phys(unsigned long vaddr, unsigned long *paddr);
 
+int vmcore_phys_to_virt(unsigned long paddr, unsigned long *vaddr);
+
 void vmcore_cleanup(void);
 
 /* Architecture code defines this if there are other possible ELF

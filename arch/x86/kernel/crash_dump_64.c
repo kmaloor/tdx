@@ -226,6 +226,56 @@ ssize_t copy_oldmem_page_encrypted(struct iov_iter *iter, unsigned long pfn, uns
 	return __copy_oldmem_page(iter, pfn, old_vaddr, csize, offset, true);
 }
 
+int remap_oldmem_pfn_range(struct vm_area_struct *vma,
+			   unsigned long from, unsigned long pfn,
+			   unsigned long size, pgprot_t prot)
+{
+	unsigned long vma_start, pfn_start, mem_size;
+	int shared_mem, ret;
+
+	shared_mem = 0;
+	vma_start = from;
+	pfn_start = pfn;
+	mem_size = size;
+
+	if (cpu_feature_enabled(X86_FEATURE_TDX_GUEST)) {
+		unsigned long page, old_vaddr;
+		int last_shared = -1;
+
+		mem_size = 0;
+
+		for (page = pfn; page < pfn + size / PAGE_SIZE; page++) {
+			mem_size += PAGE_SIZE;
+
+			ret = vmcore_phys_to_virt(page << PAGE_SHIFT, &old_vaddr);
+			if (ret < 0)
+				return ret;
+
+			shared_mem = oldmem_is_shared(old_vaddr);
+
+			if (last_shared == -1)
+				last_shared = shared_mem;
+
+			if (last_shared != shared_mem) {
+				ret = remap_pfn_range(vma, vma_start, pfn_start,
+						      mem_size - PAGE_SIZE,
+						      last_shared ? pgprot_decrypted(prot) :
+						      pgprot_encrypted(prot));
+				if (ret < 0)
+					return ret;
+
+				vma_start += mem_size - PAGE_SIZE;
+				pfn_start = page;
+				mem_size = PAGE_SIZE;
+			}
+			last_shared = shared_mem;
+		}
+	}
+
+	return remap_pfn_range(vma, vma_start, pfn_start, mem_size,
+			       shared_mem ? pgprot_decrypted(prot) : pgprot_encrypted(prot));
+}
+
 ssize_t elfcorehdr_read(char *buf, size_t count, u64 *ppos)
 {
 	struct kvec kvec = { .iov_base = buf, .iov_len = count };
