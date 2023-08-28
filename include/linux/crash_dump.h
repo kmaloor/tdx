@@ -26,8 +26,12 @@ extern int remap_oldmem_pfn_range(struct vm_area_struct *vma,
 
 ssize_t copy_oldmem_page(struct iov_iter *i, unsigned long pfn, size_t csize,
 		unsigned long offset);
-ssize_t copy_oldmem_page_encrypted(struct iov_iter *iter, unsigned long pfn,
+ssize_t copy_oldmem_page_encrypted(struct iov_iter *iter, unsigned long pfn, unsigned long old_vaddr,
 				   size_t csize, unsigned long offset);
+
+int vmcore_scan_elf_notes(const char *match, unsigned long *val);
+
+int vmcore_virt_to_phys(unsigned long vaddr, unsigned long *paddr);
 
 void vmcore_cleanup(void);
 

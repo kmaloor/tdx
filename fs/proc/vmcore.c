@@ -44,6 +44,7 @@ static char *elfnotes_buf;
 static size_t elfnotes_sz;
 /* Size of all notes minus the device dump notes */
 static size_t elfnotes_orig_sz;
+static bool vmcore_parsed;
 
 /* Total size of vmcore file. */
 static u64 vmcore_size;
@@ -128,8 +129,8 @@ static int open_vmcore(struct inode *inode, struct file *file)
 }
 
 /* Reads a page from the oldmem device from given offset. */
-ssize_t read_from_oldmem(struct iov_iter *iter, size_t count,
-			 u64 *ppos, bool encrypted)
+ssize_t __read_from_oldmem(struct iov_iter *iter, size_t count,
+			 u64 *ppos, unsigned long old_vaddr, bool encrypted)
 {
 	unsigned long pfn, offset;
 	ssize_t nr_bytes;
@@ -154,7 +155,7 @@ ssize_t read_from_oldmem(struct iov_iter *iter, size_t count,
 			tmp = iov_iter_zero(nr_bytes, iter);
 		} else {
 			if (encrypted)
-				tmp = copy_oldmem_page_encrypted(iter, pfn,
+				tmp = copy_oldmem_page_encrypted(iter, pfn, old_vaddr,
 								 nr_bytes,
 								 offset);
 			else
@@ -175,6 +176,12 @@ ssize_t read_from_oldmem(struct iov_iter *iter, size_t count,
 	srcu_read_unlock(&vmcore_cb_srcu, idx);
 
 	return read;
+}
+
+ssize_t read_from_oldmem(struct iov_iter *iter, size_t count,
+			 u64 *ppos, bool encrypted)
+{
+	return __read_from_oldmem(iter, count, ppos, 0, encrypted);
 }
 
 /*
@@ -233,7 +240,8 @@ int __weak remap_oldmem_pfn_range(struct vm_area_struct *vma,
  * Architectures which support memory encryption override this.
  */
 ssize_t __weak copy_oldmem_page_encrypted(struct iov_iter *iter,
-		unsigned long pfn, size_t csize, unsigned long offset)
+		unsigned long pfn, unsigned long old_vaddr, size_t csize,
+		unsigned long offset)
 {
 	return copy_oldmem_page(iter, pfn, csize, offset);
 }
@@ -387,11 +395,14 @@ static ssize_t __read_vmcore(struct iov_iter *iter, loff_t *fpos)
 
 	list_for_each_entry(m, &vmcore_list, list) {
 		if (*fpos < m->offset + m->size) {
+			loff_t addr_offs = *fpos - m->offset;
+
 			tsz = (size_t)min_t(unsigned long long,
-					    m->offset + m->size - *fpos,
+					    m->size - addr_offs,
 					    iov_iter_count(iter));
-			start = m->paddr + *fpos - m->offset;
-			tmp = read_from_oldmem(iter, tsz, &start,
+			start = m->paddr + addr_offs;
+			tmp = __read_from_oldmem(iter, tsz, &start,
+					m->vaddr + addr_offs,
 					cc_platform_has(CC_ATTR_MEM_ENCRYPT));
 			if (tmp < 0)
 				return tmp;
@@ -410,6 +421,22 @@ static ssize_t __read_vmcore(struct iov_iter *iter, loff_t *fpos)
 static ssize_t read_vmcore(struct kiocb *iocb, struct iov_iter *iter)
 {
 	return __read_vmcore(iter, &iocb->ki_pos);
+}
+
+int vmcore_virt_to_phys(unsigned long vaddr, unsigned long *paddr)
+{
+	struct vmcore *m;
+
+	if (!vmcore_parsed)
+		return -ENODATA;
+
+	list_for_each_entry(m, &vmcore_list, list) {
+		if (vaddr >= m->vaddr && vaddr < m->vaddr + m->size) {
+			*paddr = m->paddr + (vaddr - m->vaddr);
+			return 0;
+		}
+	}
+	return -ENOENT;
 }
 
 /*
@@ -1127,6 +1154,7 @@ static int __init process_ptload_program_headers_elf64(char *elfptr,
 		new = get_new_element();
 		if (!new)
 			return -ENOMEM;
+		new->vaddr = phdr_ptr->p_vaddr - (paddr - start);
 		new->paddr = start;
 		new->size = size;
 		list_add_tail(&new->list, vc_list);
@@ -1170,6 +1198,7 @@ static int __init process_ptload_program_headers_elf32(char *elfptr,
 		new = get_new_element();
 		if (!new)
 			return -ENOMEM;
+		new->vaddr = phdr_ptr->p_vaddr - (paddr - start);
 		new->paddr = start;
 		new->size = size;
 		list_add_tail(&new->list, vc_list);
@@ -1203,6 +1232,33 @@ static void free_elfcorebuf(void)
 	elfcorebuf = NULL;
 	vfree(elfnotes_buf);
 	elfnotes_buf = NULL;
+}
+
+int vmcore_scan_elf_notes(const char *match, unsigned long *val)
+{
+	size_t i, n = strlen(match);
+	char buf[17];
+
+	if (!vmcore_parsed)
+		return -ENODATA;
+
+	if (!elfnotes_buf)
+		return -ENOENT;
+
+	for (i = 0; i < elfnotes_sz; i++) {
+		size_t rem = elfnotes_sz - i;
+
+		if (rem <= n)
+			return -ENOENT;
+		if (strncmp(elfnotes_buf + i, match, n))
+			continue;
+		memset(buf, 0, sizeof(buf));
+		i += n;
+		rem -= n;
+		strncpy(buf, elfnotes_buf + i, min(sizeof(buf) - 1, rem));
+		return sscanf(buf, "%lx", val) == 1 ? 0 : -EINVAL;
+	}
+	return -ENOENT;
 }
 
 static int __init parse_crash_elf64_headers(void)
@@ -1347,6 +1403,7 @@ static int __init parse_crash_elf_headers(void)
 	/* Determine vmcore size. */
 	vmcore_size = get_vmcore_size(elfcorebuf_sz, elfnotes_sz,
 				      &vmcore_list);
+	vmcore_parsed = true;
 
 	return 0;
 }

@@ -22,6 +22,7 @@ struct kcore_list {
 
 struct vmcore {
 	struct list_head list;
+	unsigned long long vaddr;
 	unsigned long long paddr;
 	unsigned long long size;
 	loff_t offset;
